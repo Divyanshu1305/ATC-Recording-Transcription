@@ -4,7 +4,7 @@
 # Strictly uses Python 3.12 and pre-caches the Silero VAD model
 # ==============================================================================
 
-FROM nvidia/cuda:12.4.1-runtime-ubuntu24.04 AS gpu-runtime
+FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04 AS gpu-runtime
 
 # Set environment variables for Python, CUDA capabilities, and device setting
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -14,11 +14,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility \
     DEVICE=cuda
 
-# Phase 1, Step 2: Install Python 3.12, ffmpeg, Node.js, and build prerequisites
+# Phase 1, Step 2: Install Python 3.12 via deadsnakes PPA, get-pip.py, ffmpeg, Node.js, and build prerequisites
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    python3.12 \
-    python3.12-venv \
-    python3-pip \
+    software-properties-common \
     ffmpeg \
     curl \
     wget \
@@ -28,6 +26,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     nodejs \
     npm \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 \
+    python3.12-venv \
+    python3.12-dev \
+    && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 \
     && rm -rf /var/lib/apt/lists/* \
     && ln -sf /usr/bin/python3.12 /usr/bin/python3 \
     && ln -sf /usr/bin/python3.12 /usr/bin/python
