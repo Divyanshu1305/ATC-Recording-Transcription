@@ -133,25 +133,41 @@ Or use a package manager:
 
 ---
 
-### 3. Downloaded trained model & Convert to GGUF
+### 3. Download Trained Model & Convert to GGUF
 
-#### Downloaded trained model 
+#### Download Trained Model 
+Download the trained NeMo checkpoint model from [Hugging Face](https://huggingface.co/qenneth/parakeet-tdt-0.6b-v3-finetuned-for-ATC/blob/main/parakeet-tdt-0.6b-v3-finetuned-for-ATC.nemo).
 
-#### Download trained nemo checkpoint model from [here](https://huggingface.co/qenneth/parakeet-tdt-0.6b-v3-finetuned-for-ATC/blob/main/parakeet-tdt-0.6b-v3-finetuned-for-ATC.nemo)
+#### Convert to GGUF Format
+Using the conversion [script](https://github.com/CrispStrobe/CrispASR/blob/main/models/convert-parakeet-to-gguf.py):
 
-### Convert this into GGUF
-
-Using this [script](https://github.com/CrispStrobe/CrispASR/blob/main/models/convert-parakeet-to-gguf.py)
-
-```
-python convert-parakeet-to-gguf.py --nemo <file.nemo> --output models/gguf/model.gguf 
+```bash
+python convert-parakeet-to-gguf.py --nemo <file.nemo> --output models/ggufs/speech-model.gguf 
 ```
 
 ---
 
-### 4. VAD model
+### 4. Download & Cache Silero VAD Model
 
-Run this once so that C:\Users\<user>\.cache\crispasr contains the vad model. 
+CrispASR utilizes the Silero Voice Activity Detection (VAD) model (`ggml-silero-v6.2.0.bin`) to accurately isolate active speech timestamps before inference.
+
+#### Download the Silero VAD Model
+- **Direct Download Link**: [ggml-silero-v6.2.0.bin](https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin)
+
+#### Where CrispASR Caches the VAD Model by OS:
+- **On Windows**: Place the downloaded `ggml-silero-v6.2.0.bin` inside:
+  ```cmd
+  C:\Users\<username>\.cache\crispasr\
+  ```
+  *(Alternatively, run `crispasr.exe --vad` once locally so it auto-downloads into this directory.)*
+
+- **On Linux / inside Docker (`/root` or `$HOME`)**: Place `ggml-silero-v6.2.0.bin` inside:
+  ```bash
+  $HOME/.cache/crispasr/
+  # Or explicitly inside container runtime:
+  /root/.cache/crispasr/
+  ```
+  *(Note: Our Dockerfiles automatically download and cache `ggml-silero-v6.2.0.bin` inside `/root/.cache/crispasr/` and `/app/cache/` during image build, ensuring zero-configuration offline execution.)*
 
 ---
 
@@ -188,6 +204,29 @@ cd frontend
 npm install
 npm run dev
 ```
+
+## How to run via Docker
+Two standalone Dockerfiles are provided inside the `docker/` directory targeting **Python 3.12**. The speech model (`speech-model.gguf`), Silero VAD (`ggml-silero-v6.2.0.bin`), and SQLite database (`transcriptions.db`) are **completely self-contained within the built container**.
+
+### 1. Build and Run for CPU
+```bash
+# Build image from project root
+docker build -f docker/Dockerfile.cpu -t atc-asr:cpu .
+
+# Run container (API on port 8000)
+docker run -d -p 8000:8000 --name atc-asr-cpu atc-asr:cpu
+```
+
+### 2. Build and Run for GPU (CUDA 12)
+```bash
+# Build image from project root
+docker build -f docker/Dockerfile.gpu -t atc-asr:gpu .
+
+# Run container with NVIDIA GPU acceleration
+docker run -d --gpus all -p 8000:8000 --name atc-asr-gpu atc-asr:gpu
+```
+
+*(Optional: Add `-v "%cd%/output:/app/output"` to `docker run` if you wish to export generated audio chunks directly to your local Windows directory.)*
 
 ---
 
