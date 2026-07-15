@@ -33,8 +33,27 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # Serve the output folder statically
 app.mount("/output", StaticFiles(directory=OUTPUT_DIR), name="output")
 
+# Serve built React frontend assets (`frontend/dist/assets/`) if compiled
+FRONTEND_DIST = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend", "dist")
+if os.path.exists(FRONTEND_DIST):
+    assets_dir = os.path.join(FRONTEND_DIST, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+@app.get("/api/status")
+def read_status():
+    return {
+        "message": "ATC ASR Transcription API is running.",
+        "docs": "/docs",
+        "supported_features": ["Bandpass Filter", "Spectral Noise Reduction", "Overlapping 30s Chunks Saving", "Fast transcription via crispasr.exe"]
+    }
+
 @app.get("/")
 def read_root():
+    index_file = os.path.join(FRONTEND_DIST, "index.html")
+    if os.path.exists(index_file):
+        from fastapi.responses import FileResponse
+        return FileResponse(index_file)
     return {
         "message": "ATC ASR Transcription API is running.",
         "docs": "/docs",
@@ -188,6 +207,19 @@ def get_transcription(id: int):
     if not record:
         raise HTTPException(status_code=404, detail="Transcription not found")
     return record
+
+@app.get("/{full_path:path}")
+async def serve_spa_or_static(full_path: str):
+    if os.path.exists(FRONTEND_DIST):
+        file_path = os.path.join(FRONTEND_DIST, full_path)
+        if os.path.isfile(file_path):
+            from fastapi.responses import FileResponse
+            return FileResponse(file_path)
+        index_file = os.path.join(FRONTEND_DIST, "index.html")
+        if os.path.exists(index_file):
+            from fastapi.responses import FileResponse
+            return FileResponse(index_file)
+    raise HTTPException(status_code=404, detail="Route not found")
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="127.0.0.1", port=8000, reload=True)
