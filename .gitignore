@@ -1,0 +1,17 @@
+bin/cpu/*
+bin/cuda/*
+
+cache/*
+
+deps/*
+
+frontend/node_modules/*
+frontend/dist/*
+
+models/ggufs/*
+
+test-files/*
+
+offline.zip
+
+
