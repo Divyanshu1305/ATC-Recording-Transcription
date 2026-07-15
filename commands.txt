@@ -1,0 +1,11 @@
+--vad --flush-after 1
+
+bin\cuda\crispasr.exe -m "models\ggufs\speech-model.gguf" -f "test-files\audio_0.wav"  --vad --flush-after 1
+
+
+ curl -X POST "http://127.0.0.1:8000/transcribe" ^
+More?      -F "file=@test-files/segment_03_30-40min.wav" ^
+More?      -F "apply_noise_removal=true" ^
+More?      -F "noise_reduction=0.75" ^
+More?      -F "language=en" ^
+More?      -F "save_intermediate=true"
