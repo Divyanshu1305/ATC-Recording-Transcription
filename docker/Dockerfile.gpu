@@ -1,0 +1,87 @@
+# ==============================================================================
+# Dockerfile.gpu - Air Traffic Control (ATC) ASR Transcription Pipeline (GPU/CUDA)
+# Follows README Phase 1 (Prerequisites & Binaries) and Phase 2 (Backend Setup)
+# Strictly uses Python 3.12 and pre-caches the Silero VAD model
+# ==============================================================================
+
+FROM nvidia/cuda:12.4.1-runtime-ubuntu24.04 AS gpu-runtime
+
+# Set environment variables for Python, CUDA capabilities, and device setting
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    DEBIAN_FRONTEND=noninteractive \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=compute,utility \
+    DEVICE=cuda
+
+# Phase 1, Step 2: Install Python 3.12, ffmpeg, Node.js, and build prerequisites
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 \
+    python3.12-venv \
+    python3-pip \
+    ffmpeg \
+    curl \
+    wget \
+    tar \
+    libsndfile1 \
+    build-essential \
+    git \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -sf /usr/bin/python3.12 /usr/bin/python3 \
+    && ln -sf /usr/bin/python3.12 /usr/bin/python
+
+WORKDIR /app
+
+# Phase 2, Step 3: Copy requirements and install core Python 3.12 dependencies
+COPY requirements_transcribe.txt /app/requirements_transcribe.txt
+RUN python3 -m pip install --no-cache-dir --upgrade pip && \
+    python3 -m pip install --no-cache-dir -r requirements_transcribe.txt
+
+# Copy application source code and models
+COPY . /app
+
+# Initialize SQLite database inside the container filesystem and ensure read/write permissions
+RUN python3 -c "import database; database.init_db()" && chmod 666 /app/transcriptions.db
+
+# Phase 1, Step 1: Download Crisp ASR Linux GPU CUDA 12 binary from official repository
+# We ensure the binary is copied to both `bin/cuda/crispasr` and `bin/cuda/crispasr.exe`
+# so that app.py's default path (bin/cuda/crispasr.exe) runs cleanly under Linux CUDA.
+RUN mkdir -p bin/cuda /tmp/crisp && \
+    curl -L -o /tmp/crispasr.tar.gz https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.10/crispasr-linux-x86_64-cuda.tar.gz && \
+    tar -xzf /tmp/crispasr.tar.gz -C /tmp/crisp && \
+    find /tmp/crisp -type f -exec cp -v {} bin/cuda/ \; && \
+    if [ -f bin/cuda/crispasr ]; then cp -f bin/cuda/crispasr bin/cuda/crispasr.exe; fi && \
+    chmod +x bin/cuda/* && \
+    rm -rf /tmp/crisp /tmp/crispasr.tar.gz
+
+# Phase 1, Step 3: Download NeMo checkpoint (`parakeet-tdt-0.6b-v3-finetuned-for-ATC.nemo`)
+# and convert it to GGUF format (`models/ggufs/speech-model.gguf`) directly inside the container.
+# We temporarily install torch/sentencepiece for conversion and remove torch after to save image space.
+RUN mkdir -p models/ggufs /tmp/model_conv && \
+    pip install --no-cache-dir torch gguf sentencepiece pyyaml numpy && \
+    curl -L -o /tmp/model_conv/convert-parakeet-to-gguf.py https://raw.githubusercontent.com/CrispStrobe/CrispASR/main/models/convert-parakeet-to-gguf.py && \
+    curl -L -o /tmp/model_conv/model.nemo https://huggingface.co/qenneth/parakeet-tdt-0.6b-v3-finetuned-for-ATC/resolve/main/parakeet-tdt-0.6b-v3-finetuned-for-ATC.nemo && \
+    python3 /tmp/model_conv/convert-parakeet-to-gguf.py --nemo /tmp/model_conv/model.nemo --output models/ggufs/speech-model.gguf && \
+    pip uninstall -y torch && \
+    rm -rf /tmp/model_conv /root/.cache/pip
+
+# Phase 1, Step 4: Download and cache Silero VAD model (`ggml-silero-v6.2.0.bin`) into `/root/.cache/crispasr/`
+# This ensures offline execution without needing internet access on startup.
+RUN mkdir -p /root/.cache/crispasr /app/cache && \
+    curl -L -o /root/.cache/crispasr/ggml-silero-v6.2.0.bin https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin && \
+    cp -v /root/.cache/crispasr/ggml-silero-v6.2.0.bin /app/cache/ggml-silero-v6.2.0.bin && \
+    if [ -d "/app/cache" ]; then cp -r /app/cache/* /root/.cache/crispasr/ 2>/dev/null || true; fi
+
+# Phase 2, How to run Frontend: Install React/Vite dependencies and pre-build static UI
+RUN if [ -d "frontend" ]; then cd frontend && npm install && npm run build || true; fi
+
+# Create required runtime output directories
+RUN mkdir -p output test-files
+
+# Expose ports: 8000 for FastAPI backend, 3000 for optional Vite dev server
+EXPOSE 8000 3000
+
+# Phase 2, Step 4: Launch FastAPI application via uvicorn using Python 3.12
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
