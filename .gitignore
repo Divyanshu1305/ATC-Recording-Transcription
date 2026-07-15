@@ -1,6 +1,7 @@
 bin/cpu/*
 bin/cuda/*
 
+venv/*
 cache/*
 
 deps/*
