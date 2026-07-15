@@ -206,18 +206,31 @@ npm run dev
 ```
 
 ## How to run via Docker
-Two standalone Dockerfiles are provided inside the `docker/` directory targeting **Python 3.12**. The speech model (`speech-model.gguf`), Silero VAD (`ggml-silero-v6.2.0.bin`), and SQLite database (`transcriptions.db`) are **completely self-contained within the built container**.
+The speech model (`speech-model.gguf`), Silero VAD (`ggml-silero-v6.2.0.bin`), React Web Console (`index.html`), and SQLite database (`transcriptions.db`) are **completely self-contained within the built container**. You can either pull the pre-built image directly from Docker Hub or build it locally.
 
-### 1. Build and Run for CPU
+### Option A: Quickstart via Docker Hub (Pre-built Image)
+You can launch the complete self-contained CPU container directly from Docker Hub without building:
+```bash
+# Pull and run the official pre-built CPU image
+docker run -d -p 8000:8000 --name atc-asr-cpu pronoob007/atc-asr:cpu
+```
+Once running, visit **`http://127.0.0.1:8000/`** (or port 8000 in Codespaces) to access the interactive web console.
+
+---
+
+### Option B: Build Locally from Source
+If you prefer to build the container images locally on your machine, two standalone Dockerfiles are provided inside the `docker/` directory targeting **Python 3.12**.
+
+#### 1. Build and Run for CPU
 ```bash
 # Build image from project root
 docker build -f docker/Dockerfile.cpu -t atc-asr:cpu .
 
-# Run container (API on port 8000)
+# Run container (API & Web UI on port 8000)
 docker run -d -p 8000:8000 --name atc-asr-cpu atc-asr:cpu
 ```
 
-### 2. Build and Run for GPU (CUDA 12)
+#### 2. Build and Run for GPU (CUDA 12)
 ```bash
 # Build image from project root
 docker build -f docker/Dockerfile.gpu -t atc-asr:gpu .
@@ -227,6 +240,21 @@ docker run -d --gpus all -p 8000:8000 --name atc-asr-gpu atc-asr:gpu
 ```
 
 *(Optional: Add `-v "%cd%/output:/app/output"` to `docker run` if you wish to export generated audio chunks directly to your local Windows directory.)*
+
+---
+
+### Option C: Pushing to Docker Hub
+To upload or update your self-contained built images (`atc-asr:cpu` / `atc-asr:gpu`) on Docker Hub:
+```bash
+# 1. Login to Docker Hub from your terminal
+docker login
+
+# 2. Tag your local image with your repository name (`pronoob007/atc-asr:cpu`)
+docker tag atc-asr:cpu pronoob007/atc-asr:cpu
+
+# 3. Push the image directly to Docker Hub
+docker push pronoob007/atc-asr:cpu
+```
 
 ---
 
